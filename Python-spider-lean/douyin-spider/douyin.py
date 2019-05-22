@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*-  
+"""
+@author: YuFei 
+@email: yufei6808@163.com
+@site: http://www.antuan.com
+@version: 0.0.1
+@date: 2018-08-23
+@explain: 功能介绍
+"""
 # -*- coding:utf-8 -*-
 from contextlib import closing
 import requests, json, re, os, sys, random
@@ -5,9 +15,8 @@ from ipaddress import ip_address
 from subprocess import Popen, PIPE
 import urllib
 
-
 class DouYin(object):
-    def __init__(self, width=500, height=300):
+    def __init__(self, width = 500, height = 300):
         """
         抖音App视频下载
         """
@@ -26,7 +35,7 @@ class DouYin(object):
             'X-Forwarded-For': str(rip),
         }
 
-    def get_video_urls(self, user_id, type_flag='f'):
+    def get_video_urls(self, user_id):
         """
         获得视频播放地址
         Parameters:
@@ -41,72 +50,40 @@ class DouYin(object):
         share_urls = []
         max_cursor = 0
         has_more = 1
-        i = 0
-        share_user_url = 'https://www.douyin.com/share/user/%s' % user_id
+        share_user_url = 'https://www.amemv.com/share/user/%s' % user_id
         share_user = requests.get(share_user_url, headers=self.headers)
-        while share_user.status_code != 200:
-            share_user = requests.get(share_user_url, headers=self.headers)
-        _dytk_re = re.compile(r"dytk\s*:\s*'(.+)'")
+        _dytk_re = re.compile(r"dytk:\s*'(.+)'")
         dytk = _dytk_re.search(share_user.text).group(1)
         _nickname_re = re.compile(r'<p class="nickname">(.+?)<\/p>')
         nickname = _nickname_re.search(share_user.text).group(1)
-        urllib.request.urlretrieve(
-            'https://raw.githubusercontent.com/Jack-Cherish/python-spider/master/douyin/fuck-byted-acrawler.js',
-            'fuck-byted-acrawler.js')
+        print('JS签名下载中')
+        urllib.request.urlretrieve('https://raw.githubusercontent.com/Jack-Cherish/python-spider/master/douyin/fuck-byted-acrawler.js', 'fuck-byted-acrawler.js')
         try:
-            Popen(['node', '-v'], stdout=PIPE, stderr=PIPE).communicate()
+            process = Popen(['node', 'fuck-byted-acrawler.js', str(user_id)], stdout=PIPE, stderr=PIPE)
         except (OSError, IOError) as err:
             print('请先安装 node.js: https://nodejs.org/')
             sys.exit()
-        user_url_prefix = 'https://www.douyin.com/aweme/v1/aweme/favorite' if type_flag == 'f' else 'https://www.douyin.com/aweme/v1/aweme/post'
+        sign = process.communicate()[0].decode().strip('\n').strip('\r')
         print('解析视频链接中')
         while has_more != 0:
-            process = Popen(['node', 'fuck-byted-acrawler.js', str(user_id)], stdout=PIPE, stderr=PIPE)
-            _sign = process.communicate()[0].decode().strip('\n').strip('\r')
-            user_url = user_url_prefix + '/?user_id=%s&max_cursor=%s&count=21&aid=1128&_signature=%s&dytk=%s' % (
-            user_id, max_cursor, _sign, dytk)
+            user_url = 'https://www.amemv.com/aweme/v1/aweme/post/?user_id=%s&max_cursor=%s&count=21&aid=1128&_signature=%s&dytk=%s' % (user_id, max_cursor, sign, dytk)
             req = requests.get(user_url, headers=self.headers)
             while req.status_code != 200:
                 req = requests.get(user_url, headers=self.headers)
-                print(req)
             html = json.loads(req.text)
-            print(html)
-            try:
-                while html['aweme_list'] == []:
-                    i = i + 1
-                    print('已重新链接' + str(i) + '次 (若超过100次，请ctrl+c强制停止再重来)' + '\r')
-                    sys.stdout.write('已重新链接' + str(i) + '次 (若超过100次，请ctrl+c强制停止再重来)' + '\r')
-                    sys.stdout.flush()
-                    process = Popen(['node', 'fuck-byted-acrawler.js', str(user_id)], stdout=PIPE, stderr=PIPE)
-                    _sign = process.communicate()[0].decode().strip('\n').strip('\r')
-                    user_url = user_url_prefix + '/?user_id=%s&max_cursor=%s&count=21&aid=1128&_signature=%s&dytk=%s' % (
-                    user_id, max_cursor, _sign, dytk)
-                    req = requests.get(user_url, headers=self.headers)
-                    while req.status_code != 200:
-                        req = requests.get(user_url, headers=self.headers)
-                    html = json.loads(req.text)
-            except:
-                pass
-            i = 0
             for each in html['aweme_list']:
-                try:
-                    url = 'https://aweme.snssdk.com/aweme/v1/play/?video_id=%s&line=0&ratio=720p&media_type=4&vr_type=0&test_cdn=None&improve_bitrate=0'
-                    uri = each['video']['play_addr']['uri']
-                    video_url = url % uri
-                except:
-                    continue
                 share_desc = each['share_info']['share_desc']
                 if os.name == 'nt':
                     for c in r'\/:*?"<>|':
                         nickname = nickname.replace(c, '').strip().strip('\.')
                         share_desc = share_desc.replace(c, '').strip()
                 share_id = each['aweme_id']
-                if share_desc in ['抖音-原创音乐短视频社区', 'TikTok', '']:
+                if share_desc in ['抖音-原创音乐短视频社区', 'TikTok']:
                     video_names.append(share_id + '.mp4')
                 else:
                     video_names.append(share_id + '-' + share_desc + '.mp4')
                 share_urls.append(each['share_info']['share_url'])
-                video_urls.append(video_url)
+                video_urls.append(each['video']['play_addr']['url_list'][0])
             max_cursor = html['max_cursor']
             has_more = html['has_more']
 
@@ -122,10 +99,10 @@ class DouYin(object):
         """
         # 带水印视频
         if watermark_flag == True:
-            download_url = video_url.replace('/play/', '/playwm/')
+            download_url = video_url
         # 无水印视频
         else:
-            download_url = video_url.replace('/playwm/', '/play/')
+            download_url = video_url.replace('playwm', 'play')
 
         return download_url
 
@@ -148,7 +125,7 @@ class DouYin(object):
                 sys.stdout.write('  [文件大小]:%0.2f MB\n' % (content_size / chunk_size / 1024))
 
                 with open(video_name, 'wb') as file:
-                    for data in response.iter_content(chunk_size=chunk_size):
+                    for data in response.iter_content(chunk_size = chunk_size):
                         file.write(data)
                         size += len(data)
                         file.flush()
@@ -165,25 +142,11 @@ class DouYin(object):
             None
         """
         self.hello()
-        print('搜索api需要登录，暂时使用UID下载\n分享用户页面，用浏览器打开短链接，原始链接中/share/user/后的数字即是UID')
-        user_id = input('请输入ID (例如95006183):')
-        user_id = user_id if user_id else '95006183'
-        watermark_flag = '0'#input('是否下载带水印的视频 (0-否(默认), 1-是):')
-        watermark_flag = watermark_flag if watermark_flag != '' else '0'
-        watermark_flag = bool(int(watermark_flag))
-        type_flag = 'p'#input('f-收藏的(默认), p-上传的:')
-        type_flag = type_flag if type_flag != '' else 'f'
-        save_dir = 'D:/Download/'  # input('保存路径 (例如"E:/Download/", 默认"./Download/"):')
-        save_dir = save_dir if save_dir else "./Download/"
-        video_names, video_urls, share_urls, nickname = self.get_video_urls(user_id, type_flag)
-        nickname_dir = os.path.join(save_dir, nickname)
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        if nickname not in os.listdir(save_dir):
-            os.mkdir(nickname_dir)
-        if type_flag == 'f':
-            if 'favorite' not in os.listdir(nickname_dir):
-                os.mkdir(os.path.join(nickname_dir, 'favorite'))
+        user_id = input('请输入UID(例如60388937600):')
+        watermark_flag = int(input('是否下载带水印的视频(0-否,1-是):'))
+        video_names, video_urls, share_urls, nickname = self.get_video_urls(user_id)
+        if nickname not in os.listdir():
+            os.mkdir(nickname)
         print('视频下载中:共有%d个作品!\n' % len(video_urls))
         for num in range(len(video_urls)):
             print('  解析第%d个视频链接 [%s] 中，请稍后!\n' % (num + 1, share_urls[num]))
@@ -193,13 +156,10 @@ class DouYin(object):
                 video_name = video_names[num].replace('/', '')
             else:
                 video_name = video_names[num]
-            video_path = os.path.join(nickname_dir, video_name) if type_flag != 'f' else os.path.join(nickname_dir,
-                                                                                                      'favorite',
-                                                                                                      video_name)
-            if os.path.isfile(video_path):
+            if os.path.isfile(os.path.join(nickname, video_name)):
                 print('视频已存在')
             else:
-                self.video_downloader(video_urls[num], video_path, watermark_flag)
+                self.video_downloader(video_urls[num], os.path.join(nickname, video_name), watermark_flag)
             print('\n')
         print('下载完成!')
 
@@ -213,40 +173,10 @@ class DouYin(object):
         """
         print('*' * 100)
         print('\t\t\t\t抖音App视频下载小助手')
-        print('\t\t作者:猛猛小蚂蚁')
+        print('\t\t作者:Jack Cui、steven7851')
         print('*' * 100)
 
 
 if __name__ == '__main__':
     douyin = DouYin()
     douyin.run()
-
-
-#通过
-'''
-105891291453
-
-
-'''
-
-#未通过
-'''
-68567413397
-67126621684
-72156383532
-62864520549
-64252901721
-98674543522
-96048636079
-62348878423
-64925523831
-62213988031
-94735438469
-70542844270
-91710706818
-70542844270
-58605236777
-73648692070
-98183725043
-
-'''
